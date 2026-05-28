@@ -36,18 +36,51 @@ When you're working with Claude and the 5-hour usage window resets, you normally
 
 ## Install
 
-```sh
-cd "claude continue skill"
-# Local development:
-claude --plugin-dir ./claude-continue
-# Or marketplace install (when published)
-claude plugin install ./claude-continue
+### Option A — clone and load locally (recommended for first try)
 
+```sh
+git clone https://github.com/emircbngl/claude-continue.git
+claude --plugin-dir ./claude-continue
 # inside the Claude session:
 /awake
 ```
 
-If installing from a `.zip` bundle, marketplace unpackers sometimes strip the executable bit on shell scripts. If `bash: /scripts/heartbeat.sh: Permission denied` appears in your hook output, run once:
+`--plugin-dir` loads the plugin for that one session only. No global install, no marketplace step. Good for trying it out.
+
+### Option B — install from a release tag
+
+```sh
+git clone --branch claude-continue--v0.1.0 https://github.com/emircbngl/claude-continue.git
+claude --plugin-dir ./claude-continue
+```
+
+Tags follow Claude's plugin convention: `{name}--v{version}`. Use a tag (instead of `main`) when you want a pinned version that won't shift under you.
+
+### Option C — persistent install via Claude's plugin manager
+
+When the plugin is added to a marketplace you have configured, you can install it like any other plugin:
+
+```sh
+claude plugin install claude-continue
+# inside the session:
+/awake
+```
+
+Persistent installs live under `~/.claude/plugins/`. List with `claude plugin list`. Uninstall with `claude plugin uninstall claude-continue`.
+
+### Optional: launchd auto-relaunch (macOS, CLI users only)
+
+```sh
+bash claude-continue/scripts/install-launchd.sh
+# To remove:
+bash claude-continue/scripts/uninstall-launchd.sh
+```
+
+The launchd job opens your terminal every ~5 hours and runs `claude -c "/awake"`. Skip this on Claude Desktop — the primary cron mechanism handles continuity inside the app.
+
+### Troubleshooting: "Permission denied" on hook scripts
+
+Some marketplace bundles strip the executable bit when unpacking. If hook output shows `bash: /scripts/heartbeat.sh: Permission denied`, run once:
 
 ```sh
 chmod +x "$(dirname "$(find ~/.claude/plugins -name plugin.json -path '*claude-continue*' | head -1)")"/scripts/*.sh
