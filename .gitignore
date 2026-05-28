@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Backup files left by BSD sed on failure
+*.bak
+
+# Runtime artifacts (these live under ~/.claude/, never inside the plugin repo)
+# Listed here defensively in case someone symlinks state dirs in:
+continue-state/
+.cache/

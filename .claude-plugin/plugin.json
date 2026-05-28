@@ -1,0 +1,8 @@
+{
+  "name": "claude-continue",
+  "version": "0.1.0",
+  "description": "Survive Claude's 5-hour usage limit. Same-chat continuity via durable cron; state-file resume as fallback; /rip kill switch; optional launchd auto-relaunch. Zero idle token cost.",
+  "author": { "name": "emircbngl" },
+  "license": "MIT",
+  "keywords": ["resume", "continuity", "usage-limit", "cron", "launchd", "state", "ccusage"]
+}
