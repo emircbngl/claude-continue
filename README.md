@@ -127,6 +127,12 @@ claude-continue/
 └── tasks/todo.md
 ```
 
+## Star history
+
+<a href="https://star-history.com/#emircbngl/claude-continue&Date">
+  <img src="https://api.star-history.com/svg?repos=emircbngl/claude-continue&type=Date" alt="Star history chart for emircbngl/claude-continue" width="640">
+</a>
+
 ## License
 
 MIT
