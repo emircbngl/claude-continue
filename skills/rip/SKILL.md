@@ -29,13 +29,18 @@ cp "$STATE_DIR/session.md" "$STATE_DIR/archive/before-rip.md"
 
 ## Step 4 — Cancel the cron
 
-Call `CronList` and delete **every** job whose prompt contains `/awake-tick` via `CronDelete` — not just the one in `cron_job_id`. The chain may have created jobs the state file no longer tracks (each tick overwrites `cron_job_id` with the newest). Then also delete `cron_job_id` from state if it wasn't in the list.
+Call `CronList` and delete **every** job whose prompt contains `/awake-tick` via `CronDelete`. Then ALWAYS also call `CronDelete` with the state's `cron_job_id` even if CronList showed nothing — `CronList` is session-scoped, so a durable cron armed in a *previous* session is invisible to it; a "not found" error is expected and fine.
+
+**Know what actually kills the chain:** cron deletion is best-effort cleanup. The authoritative kill is `awake_enabled: false` (Step 7) — any orphan durable cron that survives will fire `/awake-tick` once, hit that guard, and die without re-chaining. Tell the user this if they ask whether something might still fire: one silent no-op fire is possible, a continuing chain is not.
 
 ## Step 5 — Uninstall launchd (if present)
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/uninstall-launchd.sh" || true
+ls "$HOME/Library/LaunchAgents/com.user.claude-continue."*.plist 2>/dev/null
 ```
+
+If the `ls` shows agents for OTHER projects, tell the user and ask whether to remove those too: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/uninstall-launchd.sh" --all`. (/rip is per-project by default; "total" means this project's cron, launchd, hooks.)
 
 ## Step 6 — Clear hook markers
 

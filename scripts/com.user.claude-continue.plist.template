@@ -8,16 +8,16 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>-lc</string>
-    <string>osascript -e 'tell application "__TERM_APP__" to do script "cd \"__PROJECT_PATH__\" &amp;&amp; CLAUDE_CONTINUE_UNATTENDED=1 claude -c \"/awake\""'</string>
+    <string>-l</string>
+    <string>__LAUNCHD_FIRE__</string>
   </array>
   <key>StartInterval</key>
   <integer>18000</integer>
   <key>RunAtLoad</key>
   <false/>
   <key>StandardOutPath</key>
-  <string>/tmp/claude-continue-__STATE_ID__.out</string>
+  <string>__LOG_DIR__/__STATE_ID__.out</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/claude-continue-__STATE_ID__.err</string>
+  <string>__LOG_DIR__/__STATE_ID__.err</string>
 </dict>
 </plist>

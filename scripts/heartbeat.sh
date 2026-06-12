@@ -20,13 +20,15 @@ grep -q "^awake_enabled: true" "$STATE_FILE" || exit 0
 NOW=$(date +%s)
 NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# Throttle on last_updated (10 min)
+# Throttle on last_updated (10 min); also skip entirely when the state is
+# abandoned (>7 days) — no point refreshing usage for a dead task.
 LAST=$(grep "^last_updated:" "$STATE_FILE" | sed 's/^last_updated: *//' | tr -d '"')
 if [ -n "${LAST:-}" ]; then
   LAST_TS=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$LAST" +%s 2>/dev/null \
          || date -u -d "$LAST" +%s 2>/dev/null || echo 0)
   AGE=$(( NOW - LAST_TS ))
   [ "$AGE" -lt 600 ] && exit 0
+  [ "$LAST_TS" -gt 0 ] && [ "$AGE" -gt 604800 ] && exit 0
 fi
 
 USAGE=$("$SCRIPT_DIR/usage-detector.sh" 2>/dev/null || echo '{}')

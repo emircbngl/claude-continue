@@ -4,10 +4,13 @@ Survive Claude's 5-hour usage limit. **Same-chat continuity** via durable cron; 
 
 ## What it does
 
-When you're working with Claude and the 5-hour usage window resets, you normally lose context. `claude-continue` solves this two ways:
+When you're working with Claude and the 5-hour usage window resets, you normally lose context. `claude-continue` keeps the **existing chat** alive — no new terminal, no new window, no new session:
 
-1. **Same chat (primary)**: `CronCreate(durable: true)` schedules a tick that fires inside the *same* REPL right after the window resets. The conversation never changes, the context never drops.
-2. **New chat fallback**: If the CLI was closed, a per-project state file lets `/awake` rebuild context in a new session. Optional macOS launchd job can auto-launch your terminal at the right time.
+1. **Same chat, chat open (primary)**: `CronCreate(durable: true)` schedules a tick that fires inside the *same* REPL/chat right after the window resets. You hit the limit, the chat sits idle, the window resets, the tick fires in place, work continues. Works identically in Claude Code CLI and Claude Desktop.
+2. **Same chat, chat closed**: the durable cron persists on disk. Reopen the same chat (Desktop: click back into it; CLI: `claude -c`) and the queued tick fires there — still the same conversation.
+3. **State-file fallback**: if the conversation is truly gone, a per-project state file lets `/awake` rebuild context in a new session.
+
+There is also an optional macOS launchd extension that auto-opens a terminal on a timer. **Most users should NOT install it** — it opens new windows (the opposite of what this plugin is for) and exists only for the niche case of a machine that should resume work with nobody around to reopen anything.
 
 ## Commands
 
@@ -68,7 +71,11 @@ claude plugin install claude-continue
 
 Persistent installs live under `~/.claude/plugins/`. List with `claude plugin list`. Uninstall with `claude plugin uninstall claude-continue`.
 
-### Optional: launchd auto-relaunch (macOS, CLI users only)
+**Uninstall order matters if you installed the launchd extension**: run `/rip` (or `bash <plugin>/scripts/uninstall-launchd.sh --all`) BEFORE `claude plugin uninstall`. The launchd fire-guard self-uninstalls when it notices the plugin is gone, but doing it in order avoids even that one extra fire. Manual cleanup if needed: `launchctl bootout gui/$(id -u)/com.user.claude-continue.<state_id> && rm ~/Library/LaunchAgents/com.user.claude-continue.<state_id>.plist`.
+
+### Optional: launchd auto-relaunch (macOS CLI, niche — most users skip this)
+
+The core plugin **never opens a terminal or window**: the durable cron re-activates your existing chat in place. Only install launchd if you specifically need an unattended machine to open a terminal by itself every ~5 hours:
 
 ```sh
 bash claude-continue/scripts/install-launchd.sh
@@ -76,7 +83,7 @@ bash claude-continue/scripts/install-launchd.sh
 bash claude-continue/scripts/uninstall-launchd.sh
 ```
 
-The launchd job opens your terminal every ~5 hours and runs `claude -c "/awake"`. Skip this on Claude Desktop — the primary cron mechanism handles continuity inside the app.
+Never needed on Claude Desktop.
 
 ### Troubleshooting: "Permission denied" on hook scripts
 

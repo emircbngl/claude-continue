@@ -26,6 +26,7 @@ If a state file exists, extract these fields **verbatim** — they must round-tr
 | `save_mode` | from existing state |
 | `state_id` | from existing state |
 | `project` | from existing state |
+| `ticks_unattended` | from existing state (dead-man counter; default 0) |
 | `pending_questions` | from existing state — copy the WHOLE block verbatim (it is multi-line; the single-line preserve() helper below does not capture it, so copy it from the read-state output directly) |
 
 Helper (run inline before composing the new document):
@@ -69,7 +70,8 @@ last_updated: <now ISO UTC>
 save_mode: <preserved or heartbeat>
 mode_set_at: <preserved>
 current_goal: "<one-sentence goal>"
-status: in-progress
+status: <in-progress | blocked | done — the value you judged in Step 2; writing done is what lets the next tick tear the auto-wake down>
+ticks_unattended: 0
 awake_enabled: <preserved or false>
 cron_job_id: "<preserved>"
 cron_fires_at: <preserved>

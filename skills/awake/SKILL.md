@@ -7,31 +7,34 @@ description: This skill should be used when the user types "/awake", "wake up", 
 
 Three entry paths. Determine which one applies **before** doing anything else.
 
-## Step 0 — Read the environment
+## Step 0 — Read the environment (cheap calls only)
 
 ```bash
 STATE_ID=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/state-path.sh")
 STATE_FILE="$HOME/.claude/continue-state/$STATE_ID/session.md"
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/read-state.sh" --quiet-if-missing
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/tty-check.sh"
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/usage-detector.sh"
 ```
+
+Do NOT call `usage-detector.sh` yet — it can cost up to 10 s and the unattended path must stay near-free. It runs in Step 3, attended paths only.
 
 (`tty-check.sh` reports UNATTENDED only when `CLAUDE_CONTINUE_UNATTENDED=1` is set — the launchd job sets it; a user-typed `/awake` is always ATTENDED.)
 
 ## Step 1 — Early-exit checks
 
-In order:
+In order — **UNATTENDED first**, so an unattended fire never pays for the later checks' tool calls:
 
-1. State exists and `awake_enabled: false` → print "claude-continue is in /rip mode. Use /resurrect to re-enable." and stop.
-2. State exists and `status: done` → cleanup:
+1. `tty-check.sh` printed `UNATTENDED`:
+   - If state has unresolved decisions or `save_mode` is empty, append them to `pending_questions` — **only the ones not already listed there** (compare against the Step 0 output; on repeated unattended fires this step must produce no change).
+   - Print "Unattended awake: no decisions made. Run /awake interactively to proceed." and stop.
+   - **Do not call any other tools.**
+2. State exists and `awake_enabled: false` → print "claude-continue is in /rip mode. Use /resurrect to re-enable." and stop.
+3. State exists and `status: done` → full teardown (mirror /rip):
    - If `cron_job_id` is set, call `CronDelete` with that id.
    - Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/uninstall-launchd.sh"` (no-op if not installed).
-   - Print "Task already finished; auto-wake disabled." and stop.
-3. `tty-check.sh` printed `UNATTENDED`:
-   - If state has unresolved decisions or `save_mode` is empty, append them to the state file's `pending_questions` via `write-state.sh --field`.
-   - Print "Unattended awake: no decisions made. Run /awake interactively to proceed." and stop.
-   - **Do not call any other tools.** Token cost must stay ~0.
+   - `write-state.sh --field awake_enabled false`, `--field cron_job_id ""`, `--field cron_fires_at ""`.
+   - `rm -f "$HOME/.cache/claude-continue/warn-$STATE_ID"`.
+   - Print "Task already finished; auto-wake torn down." and stop.
 
 ## Step 2 — Pick the entry path
 
@@ -63,7 +66,7 @@ FIRE_EPOCH=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$EXISTING_FIRES" +%s 2>/dev/nul
 
 If `EXISTING_ID` is non-empty AND `FIRE_EPOCH -gt NOW_EPOCH` → **skip scheduling**; print "Cron already armed for <fires_at>, reusing." and go to Step 5.
 
-Otherwise compute the fire time with the dedicated script (handles millisecond ISO, UTC→local, and a now+5h05m fallback when reset_at is null/unparseable):
+Otherwise: if `EXISTING_ID` is non-empty (but stale/unparseable), call `CronDelete` with it FIRST — a cleared `cron_fires_at` must never stack a second live cron on top of an old one. Then compute the fire time with the dedicated script (handles millisecond ISO, UTC→local, and a now+5h05m fallback when reset_at is null/unparseable):
 
 ```bash
 RESET_AT=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/usage-detector.sh" | jq -r '.reset_at // empty')
@@ -93,7 +96,9 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/write-state.sh" --field cron_fires_at "<FIRE
 
 ## Step 5 — Confirm
 
-Print one line: `Auto-resume armed: /awake-tick will fire at <local time>.` Then continue what the user asked for.
+Print one line: `Auto-resume armed: /awake-tick will fire at <local time> — in THIS chat, no new window.` Then continue what the user asked for.
+
+Do NOT suggest installing launchd. It is a niche opt-in for unattended machines; the durable cron already re-activates the existing chat in place (CLI and Desktop alike). Mention launchd only if the user explicitly asks how to resume with the app fully closed and nobody at the machine.
 
 ## Notes
 

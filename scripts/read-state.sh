@@ -28,6 +28,17 @@ fi
 
 if [ "$HOOK" -eq 1 ]; then
   grep -q "^awake_enabled: true" "$STATE_FILE" || exit 0
+  # Staleness TTL: an abandoned project must not tax every future session's context
+  # with a full state dump forever. >7 days without a heartbeat → one line only.
+  LAST=$(grep "^last_updated:" "$STATE_FILE" | sed 's/^last_updated: *//' | tr -d '"')
+  if [ -n "${LAST:-}" ]; then
+    LAST_TS=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$LAST" +%s 2>/dev/null \
+           || date -u -d "$LAST" +%s 2>/dev/null || echo 0)
+    if [ "$LAST_TS" -gt 0 ] && [ $(( $(date +%s) - LAST_TS )) -gt 604800 ]; then
+      echo "STALE_STATE: claude-continue state for $STATE_ID is >7 days old (last: $LAST). Suggest /awake to re-arm or /rip to clean up. Full state not loaded."
+      exit 0
+    fi
+  fi
 fi
 
 printf '=== claude-continue state (%s) ===\n' "$STATE_ID"

@@ -32,6 +32,61 @@
 - [ ] launchd opsiyonel: install ile Terminal açılır
 - [ ] Desktop sanity: plugin yüklenir, launchd "Desktop tespit edildi" der
 
+## v0.1.2 — Safety audit ("iş bitse de zorla kaldırma yapar mı?")
+
+3-angle audit (runaway triggers / cleanup gaps / concurrency), 24 candidates,
+20 CONFIRMED + 4 PLAUSIBLE, 0 refuted. Answer before fixes: YES — it forced
+wake-ups forever. Fixes:
+
+- [x] **Dead-man switch**: `ticks_unattended` counter — awake-tick increments each
+  fire, UserPromptSubmit hook (warn-emit.sh) resets to 0 on any real user prompt.
+  2 windows with zero user activity → chain pauses, cron fields cleared, one-line
+  notice. (last_updated could NOT be the signal: the tick's own Bash calls bump it
+  via the PostToolUse heartbeat.)
+- [x] **done lifecycle closed**: awake-tick's done-check now tears down (CronDelete
+  + fields cleared + awake_enabled false + launchd uninstall) instead of silently
+  exiting; /awake's done path mirrors /rip fully; /save-state template no longer
+  hardcodes `status: in-progress`.
+- [x] **launchd rebuilt window-free** (user requirement: never open a new terminal —
+  re-activate the existing chat): plist now runs `launchd-fire.sh`, a pure-shell
+  guard that (1) self-uninstalls when plugin/project/state is gone or status is
+  done/ripped, (2) skips when state is stale >24h or any claude is already running,
+  (3) otherwise launches HEADLESS `claude -c -p "/awake"` — no window, no REPL, the
+  queued durable cron fires, process exits. Fire script is rendered into
+  ~/.cache/claude-continue/ so it survives plugin uninstall long enough to
+  self-clean. Logs moved /tmp → ~/.cache, removed on uninstall.
+- [x] **Duplicate-chain guards**: /awake deletes a stale EXISTING_ID before
+  re-scheduling; awake-tick's early-fire branch exits instead of re-scheduling;
+  awake-tick Step 4 deletes the old id before CronCreate.
+- [x] **SessionStart token tax bounded**: read-state --hook emits ONE stale line
+  (not the full state) when last_updated >7 days; heartbeat exits instantly on
+  abandoned state.
+- [x] **UNATTENDED check moved to #1** in /awake (before any tool-bearing checks);
+  usage-detector deferred out of Step 0; pending_questions append made idempotent.
+- [x] **/rip honesty**: documents that CronList is session-scoped, always tries
+  CronDelete with the stored id, and explains awake_enabled:false is the
+  authoritative kill (orphan crons fire once, hit the guard, die). Offers
+  `uninstall-launchd.sh --all` when other projects' agents exist.
+- [x] **uninstall-launchd --all**: glob-based sweep for orphans (renamed/moved
+  projects whose state-id no longer resolves).
+- [x] README: uninstall-order warning (rip/launchd before plugin uninstall).
+
+Deferred (low risk, v0.2): mkdir-mutex for concurrent heartbeat/save writers
+(single-writer atomicity already holds; flip-flop window is cosmetic), pinning
+launchd resume to a session id instead of `-c` (headless+deferred /awake makes
+hijack consequence a no-op line).
+
+### v0.1.2 safety test matrix (all passing)
+
+- [x] warn-emit resets nonzero ticks_unattended to 0
+- [x] read-state --hook: >7d stale → single STALE_STATE line, no full dump
+- [x] heartbeat: abandoned state → instant exit (31 ms)
+- [x] launchd-fire: plugin dir missing → self-uninstall branch
+- [x] launchd-fire: status done → exits without launching claude
+- [x] launchd-fire: claude already running → skips headless launch
+- [x] uninstall-launchd --all: clean no-op on empty set
+- [x] plugin validate passes
+
 ## Open assumptions to confirm during use
 
 - `${CLAUDE_PLUGIN_ROOT}` resolves in hooks (claude-obsidian's hooks.json doesn't use it; ours assumes it works — fallback: dirname-of-script resolution)
