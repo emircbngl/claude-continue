@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# Wraps `ccusage blocks --active --json` with 5-minute filesystem cache and 10s timeout.
-# Outputs a normalized JSON object: { reset_at, remaining_min, tokens_per_min, total_tokens, cost_usd, fetched_at }
-# Graceful: if ccusage/npx/jq missing or fails, returns {} with error field.
+# Wraps `ccusage blocks --active --json` with caching and a hard timeout.
+# Success cache: 5 min. Failure (negative) cache: 60 s — so an offline machine
+# pays the timeout at most once per minute, not on every hook invocation.
+# Output: { reset_at, remaining_min, tokens_per_min, total_tokens, cost_usd, fetched_at }
+# or { "error": "..." }. Always exits 0.
 set -uo pipefail
 
 CACHE_DIR="$HOME/.cache/claude-continue"
 CACHE_FILE="$CACHE_DIR/usage.json"
+ERR_CACHE_FILE="$CACHE_DIR/usage.error.json"
 CACHE_MAX_AGE=300
+ERR_CACHE_MAX_AGE=60
 TIMEOUT_SEC=10
 mkdir -p "$CACHE_DIR"
 
@@ -14,30 +18,43 @@ stat_mtime() {
   stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0
 }
 
-if [ -f "$CACHE_FILE" ]; then
-  AGE=$(( $(date +%s) - $(stat_mtime "$CACHE_FILE") ))
-  if [ "$AGE" -lt "$CACHE_MAX_AGE" ]; then
-    cat "$CACHE_FILE"
-    exit 0
-  fi
-fi
+cache_fresh() { # cache_fresh FILE MAX_AGE
+  [ -f "$1" ] || return 1
+  [ $(( $(date +%s) - $(stat_mtime "$1") )) -lt "$2" ]
+}
 
-if ! command -v npx >/dev/null 2>&1; then
-  printf '{"error":"npx not available"}\n'
+fail() { # fail MESSAGE — write negative cache and emit
+  printf '{"error":"%s"}\n' "$1" | tee "$ERR_CACHE_FILE"
+  exit 0
+}
+
+if cache_fresh "$CACHE_FILE" "$CACHE_MAX_AGE"; then
+  cat "$CACHE_FILE"
   exit 0
 fi
 
-# Portable timeout via perl alarm — macOS lacks `timeout(1)` natively
+if cache_fresh "$ERR_CACHE_FILE" "$ERR_CACHE_MAX_AGE"; then
+  cat "$ERR_CACHE_FILE"
+  exit 0
+fi
+
+command -v npx >/dev/null 2>&1 || fail "npx not available"
+
+# Hard timeout that kills the whole process group (npx spawns node children
+# that would otherwise keep the stdout pipe open past the parent's death).
 if command -v perl >/dev/null 2>&1; then
-  RAW=$(perl -e 'alarm shift; exec @ARGV' "$TIMEOUT_SEC" npx --yes ccusage@latest blocks --active --json 2>/dev/null)
+  RAW=$(perl -e '
+    my $t = shift @ARGV;
+    setpgrp(0, 0);
+    $SIG{ALRM} = sub { kill "KILL", -$$; exit 1 };
+    alarm $t;
+    exec @ARGV;
+  ' "$TIMEOUT_SEC" npx --yes ccusage@latest blocks --active --json 2>/dev/null)
 else
   RAW=$(npx --yes ccusage@latest blocks --active --json 2>/dev/null)
 fi
 
-if [ -z "$RAW" ]; then
-  printf '{"error":"ccusage returned empty or timed out"}\n'
-  exit 0
-fi
+[ -n "$RAW" ] || fail "ccusage returned empty or timed out"
 
 if ! command -v jq >/dev/null 2>&1; then
   printf '%s\n' "$RAW" > "$CACHE_FILE"
@@ -54,10 +71,8 @@ PARSED=$(printf '%s' "$RAW" | jq -c '(.blocks[0] // {}) | {
   fetched_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ"))
 }' 2>/dev/null)
 
-if [ -z "$PARSED" ] || [ "$PARSED" = "{}" ]; then
-  printf '{"error":"jq parse failed"}\n'
-  exit 0
-fi
+{ [ -n "$PARSED" ] && [ "$PARSED" != "{}" ]; } || fail "jq parse failed or no active block"
 
 printf '%s\n' "$PARSED" > "$CACHE_FILE"
+rm -f "$ERR_CACHE_FILE"
 printf '%s\n' "$PARSED"

@@ -26,6 +26,7 @@ If a state file exists, extract these fields **verbatim** — they must round-tr
 | `save_mode` | from existing state |
 | `state_id` | from existing state |
 | `project` | from existing state |
+| `pending_questions` | from existing state — copy the WHOLE block verbatim (it is multi-line; the single-line preserve() helper below does not capture it, so copy it from the read-state output directly) |
 
 Helper (run inline before composing the new document):
 
@@ -80,7 +81,7 @@ usage_snapshot:
   total_tokens: <from usage-detector>
   cost_usd: <from usage-detector>
   fetched_at: <from usage-detector>
-pending_questions: []
+pending_questions: <copy the existing block verbatim; use [] ONLY when no prior state exists>
 ---
 
 ## Current task

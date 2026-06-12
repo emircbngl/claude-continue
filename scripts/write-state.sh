@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Atomically writes state.md from stdin (or --field KEY VALUE for single-field update).
-# Archives previous version under archive/<ISO>.md before overwriting (full-write only).
-# --field supports both top-level and indented (2-space) nested keys; inserts as top-level if missing.
-# Values are passed via awk -v (NOT shell interpolation) so sed-metacharacters are safe.
+# Full-write: archives the previous version, rejects empty stdin (state-destruction guard).
+# --field: updates a top-level or 2-space-indented frontmatter key, inserting top-level if
+# missing; only operates INSIDE the frontmatter block; exits 1 if nothing was changed.
+# Values reach awk via ENVIRON (no -v) so backslashes survive untouched.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,16 +18,37 @@ if [ "${1:-}" = "--field" ]; then
   KEY="$2"; VAL="${3:-}"
   [ -f "$STATE_FILE" ] || { echo "state file missing; use full-write first" >&2; exit 1; }
 
-  awk -v k="$KEY" -v v="$VAL" '
-    BEGIN { replaced = 0; in_fm = 0; fm_end_line = 0 }
-    /^---$/ { in_fm++ }
-    in_fm == 1 && match($0, "^  "k": ") { print "  " k ": " v; replaced = 1; next }
-    in_fm == 1 && match($0, "^"k": ")   { print k ": " v;       replaced = 1; next }
-    in_fm == 2 && fm_end_line == 0 && !replaced { print k ": " v; fm_end_line = 1 }
+  TMP="$STATE_FILE.tmp.$$"
+  WS_KEY="$KEY" WS_VAL="$VAL" awk '
+    BEGIN {
+      k = ENVIRON["WS_KEY"]; v = ENVIRON["WS_VAL"]
+      replaced = 0; inserted = 0; in_fm = 0
+    }
+    /^---$/ {
+      in_fm++
+      if (in_fm == 2 && !replaced) { print k ": " v; inserted = 1 }
+      print; next
+    }
+    in_fm == 1 && (index($0, "  " k ":") == 1 || index($0, k ":") == 1) {
+      prefix = (index($0, "  ") == 1) ? "  " : ""
+      print prefix k ": " v
+      replaced = 1; next
+    }
     { print }
-  ' "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+    END { exit (replaced || inserted) ? 0 : 1 }
+  ' "$STATE_FILE" > "$TMP" || { rm -f "$TMP"; echo "field update failed: $KEY" >&2; exit 1; }
+  mv "$TMP" "$STATE_FILE"
   echo "$STATE_FILE"
   exit 0
+fi
+
+# Full write — buffer stdin first and refuse to clobber state with empty input
+TMP="$STATE_FILE.tmp.$$"
+cat > "$TMP"
+if [ ! -s "$TMP" ]; then
+  rm -f "$TMP"
+  echo "refusing to write empty state (stdin was empty)" >&2
+  exit 1
 fi
 
 if [ -f "$STATE_FILE" ]; then
@@ -34,7 +56,5 @@ if [ -f "$STATE_FILE" ]; then
   cp "$STATE_FILE" "$ARCHIVE_DIR/$ISO.md"
 fi
 
-TMP="$STATE_FILE.tmp.$$"
-cat > "$TMP"
 mv "$TMP" "$STATE_FILE"
 echo "$STATE_FILE"

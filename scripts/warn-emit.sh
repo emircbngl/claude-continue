@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Invoked by UserPromptSubmit hook. If a WARN marker exists AND awake_enabled is true,
 # emits one line to stdout (Claude sees as context), then deletes the marker.
-# After /rip we delete the marker proactively so this is doubly safe.
+# Marker lives under ~/.cache (user-owned), not /tmp (world-writable).
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STATE_ID="$("$SCRIPT_DIR/state-path.sh")"
-WARN_MARKER="/tmp/claude-continue-warn-$STATE_ID"
+WARN_MARKER="$HOME/.cache/claude-continue/warn-$STATE_ID"
 STATE_FILE="$HOME/.claude/continue-state/$STATE_ID/session.md"
 
 [ -f "$WARN_MARKER" ] || exit 0

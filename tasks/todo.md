@@ -102,3 +102,68 @@ Applied after `/code-review` max-effort pass:
 - [x] warn-emit.sh silent + clears marker when `awake_enabled: false`
 - [x] `claude plugin validate` still passes after all changes
 
+## v0.1.1 — Second review round (ultracode workflow, 39 findings)
+
+A 5-angle finder fan-out produced 39 deduped candidates; the verify stage hit the
+session limit (ironically, the exact problem this plugin solves), so verification
+was done by hand with executable tests. Headline defects, all CONFIRMED by test:
+
+1. **Both UTC→local cron formulas were broken** (awake: `-v+5M` and the output
+   format placed after the operand are silently ignored AND `-u` makes output UTC;
+   awake-tick: missing `-u` parses UTC as local). Fixed by replacing inline date
+   arithmetic with a single tested script, `scripts/next-cron.sh` (epoch-based,
+   millisecond-ISO tolerant, now+5h05m fallback). Proven: `10:00Z → 05 13` (+03).
+2. **awake-tick's early/on-time test was inverted in practice** — the tick turn
+   itself starts the new ccusage block, so the fresh `endTime` is always in the
+   future and every legitimate fire would be classified "early". Now validates
+   against the state's own `cron_fires_at`; ccusage only aims the NEXT tick.
+3. **tty-check could never print ATTENDED** (hooks and the Bash tool both run on
+   pipes). Replaced the TTY test with an explicit `CLAUDE_CONTINUE_UNATTENDED=1`
+   env signal set only by the launchd command line.
+4. **Offline = 10s penalty on every Edit** (no negative cache + last_updated only
+   bumping on success). Added a 60-s error cache; perl timeout now kills the whole
+   process group (npx's node children kept the pipe open before).
+5. **awk -v mangled backslashes** (C-escape processing). All values now flow via
+   ENVIRON. Proven: `C:\new\table | x & y` round-trips intact.
+6. **Key-matching required a trailing space** (`key:` with empty value never
+   matched). Both updaters now use index-based prefix checks; heartbeat collapsed
+   8 awk+mv passes into ONE (single tmp.$$, frontmatter-gated — body lines with
+   key-like prefixes proven untouched).
+7. **Empty-stdin full write destroyed state.** Now buffered first and rejected.
+8. **SessionStart hook leaked full state into every session's context** even when
+   awake was disabled. `read-state.sh --hook` is silent unless `awake_enabled:
+   true`, and emits CRON_EXPIRED when a scheduled fire was missed (7-day durable
+   cron expiry recovery path).
+9. **`/resurrect` clobbered post-rip saves** (wholesale archive copy). Now a flag
+   flip on the live state; archive copy only as disaster recovery.
+10. **`/save-state` wiped pending_questions** (schema hardcoded `[]`). Preserve
+    table + schema updated.
+11. **state-path length cap didn't cap** (long basename) and git-repo subdirs got
+    different ids in the fallback. Hash source is now the id-defining path,
+    basename truncated to 40 chars. Proven: 100-char dir → 57-char id.
+12. **install-launchd sed broke on `&`/`|` in paths.** Replacement values now
+    escaped. Proven with `/Users/x/R&D project`.
+13. Smaller: WARN marker moved /tmp → ~/.cache (symlink hardening), PostToolUse
+    matcher now includes Bash, `/rip` sweeps ALL `/awake-tick` crons via CronList,
+    README chmod one-liner fixed (`.claude-plugin` sibling), iTerm AppleScript
+    caveat warned at install time, non-TTY install skips the interactive prompt.
+
+Accepted limitations (documented, not fixed): launchd StartInterval anchors to
+load time, not the usage boundary; iTerm/Warp/Ghostty need a different AppleScript
+verb (v0.2); Bash-tool file writes only heartbeat via the Bash matcher.
+
+### v0.1.1 test matrix (all passing)
+
+- [x] next-cron.sh: future ISO+ms → correct local fields (10:00Z → "05 13" at +03)
+- [x] next-cron.sh: past / null / empty reset_at → now+5h05m fallback
+- [x] --field ENVIRON round-trip: `C:\new\table | x & y` unchanged
+- [x] --field on valueless `cron_job_id:` updates frontmatter, body line untouched
+- [x] empty-stdin full write rejected (exit 1, state intact)
+- [x] heartbeat single pass: seeds snapshot, bumps last_updated, no tmp leftovers
+- [x] negative cache: offline second call 10 ms
+- [x] state-path: 100-char dir → 57-char id (≤80)
+- [x] sed escaping: `R&D project` renders intact in plist
+- [x] tty-check: ATTENDED default, UNATTENDED only with env
+- [x] read-state --hook: silent when disabled; CRON_EXPIRED on stale cron_fires_at
+- [x] `claude plugin validate` passes
+

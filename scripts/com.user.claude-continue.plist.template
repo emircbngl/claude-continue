@@ -9,7 +9,7 @@
   <array>
     <string>/bin/bash</string>
     <string>-lc</string>
-    <string>osascript -e 'tell application "__TERM_APP__" to do script "cd \"__PROJECT_PATH__\" &amp;&amp; claude -c \"/awake\""'</string>
+    <string>osascript -e 'tell application "__TERM_APP__" to do script "cd \"__PROJECT_PATH__\" &amp;&amp; CLAUDE_CONTINUE_UNATTENDED=1 claude -c \"/awake\""'</string>
   </array>
   <key>StartInterval</key>
   <integer>18000</integer>

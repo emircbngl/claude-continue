@@ -29,7 +29,7 @@ cp "$STATE_DIR/session.md" "$STATE_DIR/archive/before-rip.md"
 
 ## Step 4 — Cancel the cron
 
-Extract `cron_job_id`; if set, call `CronDelete`. If `CronList` is available, also defensively delete any job whose prompt contains `/awake-tick` (in case of orphans from chain bugs).
+Call `CronList` and delete **every** job whose prompt contains `/awake-tick` via `CronDelete` — not just the one in `cron_job_id`. The chain may have created jobs the state file no longer tracks (each tick overwrites `cron_job_id` with the newest). Then also delete `cron_job_id` from state if it wasn't in the list.
 
 ## Step 5 — Uninstall launchd (if present)
 
@@ -40,7 +40,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/uninstall-launchd.sh" || true
 ## Step 6 — Clear hook markers
 
 ```bash
-rm -f "/tmp/claude-continue-warn-$STATE_ID"
+rm -f "$HOME/.cache/claude-continue/warn-$STATE_ID"
 ```
 
 This prevents `warn-emit.sh` from firing one last stale warning after rip.

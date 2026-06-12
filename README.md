@@ -83,8 +83,10 @@ The launchd job opens your terminal every ~5 hours and runs `claude -c "/awake"`
 Some marketplace bundles strip the executable bit when unpacking. If hook output shows `bash: /scripts/heartbeat.sh: Permission denied`, run once:
 
 ```sh
-chmod +x "$(dirname "$(find ~/.claude/plugins -name plugin.json -path '*claude-continue*' | head -1)")"/scripts/*.sh
+chmod +x "$(dirname "$(find ~/.claude/plugins -name plugin.json -path '*claude-continue*' | head -1)")/../scripts/"*.sh
 ```
+
+(`plugin.json` lives in `.claude-plugin/`, so the scripts directory is its sibling — hence the `/..`.)
 
 For the optional auto-launch on macOS:
 
