@@ -1,6 +1,6 @@
 ---
 name: awake-tick
-description: This skill should be used when the user (or a cron-fired prompt) types "/awake-tick", "awake tick", or when the durable cron from claude-continue fires after a 5-hour usage window. Ultra-minimal — does NOT summarize and does NOT ask the user questions. Confirms the scheduled fire time has arrived, prints a single-line resumed message, and chains the next cron — unless the dead-man switch says nobody is around.
+description: This skill should be used when the user types "/awake-tick" or "awake tick", or when a prompt contains "claude-continue cron fired" or "follow the awake-tick skill" (the plain-text prompt the claude-continue cron enqueues after a 5-hour usage window). Ultra-minimal — does NOT summarize and does NOT ask the user questions. Confirms the scheduled fire time has arrived, prints a single-line resumed message, and chains the next cron — unless the dead-man switch says nobody is around.
 ---
 
 # `/awake-tick` — cron-fired resumer (ultra-minimal)
@@ -62,7 +62,9 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/next-cron.sh" "$RESET_AT"
 # CRON_EXPR=... and FIRES_AT=... lines; fallback to now+5h05m is built in.
 ```
 
-Call `CronCreate(cron: "<CRON_EXPR>", prompt: "/awake-tick", durable: true, recurring: false)`.
+Call `CronCreate(cron: "<CRON_EXPR>", prompt: "awake tick — claude-continue cron fired; follow the awake-tick skill (read state, one-line resume, chain the next cron)", durable: true, recurring: false)`.
+
+(PLAIN TEXT prompt, never "/awake-tick" — a slash command dies in the parser with "Unknown command" when the skill isn't registered; plain text always wakes Claude and description-matches this skill.)
 
 3. Update state — including the dead-man counter:
 

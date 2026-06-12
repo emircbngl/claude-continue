@@ -44,6 +44,8 @@ pgrep -f "claude" >/dev/null 2>&1 && exit 0
 # 5. Headless launch: no window, no REPL. Resumes the most recent conversation in the
 #    project; the queued durable cron fires during this launch; /awake's UNATTENDED
 #    path defers decisions; the process exits when the turn completes.
+# Plain-text prompt, not "/awake": a slash command dies in the parser if the skill
+# isn't registered in this launch; plain text always processes and description-matches.
 cd "$PROJECT_PATH" || exit 0
-CLAUDE_CONTINUE_UNATTENDED=1 claude -c -p "/awake" >/dev/null 2>&1 || true
+CLAUDE_CONTINUE_UNATTENDED=1 claude -c -p "claude-continue unattended wake — follow the awake skill" >/dev/null 2>&1 || true
 exit 0

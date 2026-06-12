@@ -81,11 +81,15 @@ Call:
 ```
 CronCreate(
   cron: "<CRON_EXPR value>",
-  prompt: "/awake-tick",
+  prompt: "awake tick — claude-continue cron fired; follow the awake-tick skill (read state, one-line resume, chain the next cron)",
   durable: true,
   recurring: false
 )
 ```
+
+**The prompt must be PLAIN TEXT, never a slash command.** Live-tested: a cron-fired "/awake-tick" goes through the slash-command parser and dies with "Unknown command" if the skill isn't registered in that session — Claude never wakes. Plain text always arrives as a normal message (waking Claude unconditionally) and triggers the skill via description match.
+
+Also note: the runtime may downgrade `durable: true` to session-only (observed on Claude Desktop: "Session-only, not written to disk"). Same-chat continuity with the chat open is unaffected; if the session dies, the SessionStart hook's CRON_EXPIRED line is the recovery path.
 
 Persist:
 
