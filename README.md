@@ -17,7 +17,7 @@ When you're working with Claude and the 5-hour usage window resets, you normally
 | `/save-state` | Manual snapshot of the current session. |
 | `/awake-tick` | (Auto) Fired by the durable cron; ultra-minimal, just chains the next one. |
 | `/rip` | Kill switch — cancels cron, uninstalls launchd, disables hooks. Reversible. |
-| `/resurrect` | Undo `/rip` — restores from `archive/before-rip.md`. |
+| `/resurrect` | Undo `/rip` — re-enables on the live state (falls back to `archive/before-rip.md` only if the live state was deleted). |
 
 ## Why it's cheap
 
@@ -50,7 +50,7 @@ claude --plugin-dir ./claude-continue
 ### Option B — install from a release tag
 
 ```sh
-git clone --branch claude-continue--v0.1.0 https://github.com/emircbngl/claude-continue.git
+git clone --branch claude-continue--v0.1.1 https://github.com/emircbngl/claude-continue.git
 claude --plugin-dir ./claude-continue
 ```
 
@@ -88,18 +88,6 @@ chmod +x "$(dirname "$(find ~/.claude/plugins -name plugin.json -path '*claude-c
 
 (`plugin.json` lives in `.claude-plugin/`, so the scripts directory is its sibling — hence the `/..`.)
 
-For the optional auto-launch on macOS:
-
-```sh
-bash claude-continue/scripts/install-launchd.sh
-```
-
-To remove:
-
-```sh
-bash claude-continue/scripts/uninstall-launchd.sh
-```
-
 ## Requirements
 
 - macOS (launchd part) or any OS (core skills)
@@ -124,7 +112,8 @@ claude-continue/
 ├── hooks/hooks.json
 ├── skills/{awake,awake-tick,save-state,rip,resurrect}/SKILL.md
 ├── scripts/{state-path,read-state,write-state,heartbeat,warn-emit,
-│             tty-check,usage-detector,install-launchd,uninstall-launchd}.sh
+│             tty-check,usage-detector,next-cron,
+│             install-launchd,uninstall-launchd}.sh
 ├── scripts/com.user.claude-continue.plist.template
 └── tasks/todo.md
 ```
