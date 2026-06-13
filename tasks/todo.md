@@ -87,12 +87,56 @@ hijack consequence a no-op line).
 - [x] uninstall-launchd --all: clean no-op on empty set
 - [x] plugin validate passes
 
+## Phase-1 live test results (2026-06-12, Claude Desktop session)
+
+- ✅ **Same-chat fire PROVEN**: a one-shot cron created at 23:24 fired at exactly
+  23:26:14 and enqueued its prompt INTO THE SAME CHAT. The core mechanism works.
+- ✅ One-shot auto-delete confirmed (CronList empty after fire).
+- ❌→fixed **Slash prompts are unsafe**: the fired "/awake-tick" hit the
+  slash-command parser and died with "Unknown command" (plugin not loaded in that
+  session) — Claude was never woken. ALL cron/launchd prompts are now PLAIN TEXT
+  ("awake tick — claude-continue cron fired; follow the awake-tick skill"), which
+  always wakes Claude and triggers the skill via description match. (Fixed in v0.1.3.)
+- ⚠️ **durable: true downgraded to session-only on Desktop** ("Session-only, not
+  written to disk, dies when Claude exits"). Same-chat continuity with the chat
+  open is unaffected (that cron lives as long as the chat does). The closed-chat
+  queue scenario needs CLI re-verification (Phase 3); the SessionStart
+  CRON_EXPIRED line is the recovery path either way.
+
+## v0.1.4 — Phase 1 LIVE test (the core mechanism, proven in-chat)
+
+Ran the durable cron live, twice, in a real Claude session. Findings:
+
+1. **CONFIRMED — same-chat fire works.** A durable one-shot cron armed for T fired a
+   prompt that appeared as a NEW TURN IN THE SAME CHAT at ~T. This is the whole
+   plugin's premise; it holds. No new window, no new session.
+2. **CONFIRMED & FIXED — slash-command prompts die in the parser.** First attempt used
+   `prompt: "/awake-tick"`. When the plugin is not registered in that session the
+   slash command is rejected ("Unknown command") and Claude never wakes — the user's
+   "kaldırmadı seni" (it didn't wake you). Fix (v0.1.3): the cron and launchd now
+   enqueue a PLAIN-TEXT prompt ("awake tick — claude-continue cron fired; follow the
+   awake-tick skill …") which always opens a turn and description-matches the skill.
+   Second attempt with plain text woke the chat correctly.
+3. **CONFIRMED & FIXED — cron jitter broke the early-fire guard.** CronCreate delivered
+   the prompt ~23 s BEFORE `cron_fires_at` (its docs: "up to 90 s early"). The guard's
+   naïve `NOW < FIRES_TS` test would have classified this real, on-time fire as "early"
+   and skipped re-chaining — silently ending the chain after one tick. Fix (v0.1.4):
+   awake-tick Step 2.4 now allows a 120 s jitter window (`NOW < FIRES_TS - 120`), so
+   only a fire MORE than 2 min early counts as a stray double-fire.
+
+### Phase 1 test matrix (all passing, live)
+
+- [x] plain-text durable cron → prompt appears as a new turn in the SAME chat at fire time
+- [x] slash-command prompt does NOT wake an unregistered session (root cause of attempt 1)
+- [x] halt checks read correctly on the live fire (awake_enabled / status / ticks_unattended=0)
+- [x] resume line prints the state's actual `## Next step`
+- [x] jitter: a tick armed for `:39` fired at `:16` (23 s early) and is still treated as on-time
+
 ## Open assumptions to confirm during use
 
 - `${CLAUDE_PLUGIN_ROOT}` resolves in hooks (claude-obsidian's hooks.json doesn't use it; ours assumes it works — fallback: dirname-of-script resolution)
-- `claude -c "/awake"` auto-triggers the slash command on session start
-- CronCreate `durable: true` actually fires on next launch after CLI restart
-- Claude Desktop CronCreate behaves identically
+- Does CronCreate `durable: true` persist across restarts on the CLI? (Desktop downgrades it to session-only — observed live in Phase 1. Phase 3 covers CLI.)
+- Plain-text cron prompt description-matches the awake-tick skill when the plugin IS loaded (Phase 2 confirms; Phase 1 woke the chat even WITHOUT the plugin loaded, via the plain-text turn)
 
 ## Review
 

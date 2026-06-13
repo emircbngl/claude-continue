@@ -28,18 +28,19 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/read-state.sh" --quiet-if-missing
    - Print one line: `claude-continue: 2 pencere boyunca kullanıcı aktivitesi yok — auto-wake duraklatıldı. /awake ile yeniden kur.`
    - Exit. Do NOT chain.
    (The counter is reset to 0 by the UserPromptSubmit hook the moment the user types anything — an active user never hits this.)
-4. **Early fire**: compare the state's own `cron_fires_at` with now:
+4. **Early fire**: compare the state's own `cron_fires_at` with now, allowing for cron jitter:
 
 ```bash
 FIRES=$(grep "^cron_fires_at:" "$STATE_FILE" | sed 's/^cron_fires_at: *//' | tr -d '" ')
 FIRES_TS=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$FIRES" +%s 2>/dev/null \
         || date -u -d "$FIRES" +%s 2>/dev/null || echo 0)
 NOW=$(date +%s)
+JITTER=120   # CronCreate fires up to ~90s early; pad to 120s
 ```
 
-   If `NOW < FIRES_TS` → a cron for that time is still armed; print `claude-continue: cron already armed for <cron_fires_at>` and **exit without scheduling anything** (re-scheduling here is how duplicate chains breed).
+   If `NOW < FIRES_TS - JITTER` → the fire is MORE than two minutes ahead of schedule, so a cron for that time is genuinely still armed (this is a stray double-fire, not the scheduled one); print `claude-continue: cron already armed for <cron_fires_at>` and **exit without scheduling anything** (re-scheduling here is how duplicate chains breed).
 
-Otherwise this is the scheduled on-time fire; proceed.
+   Otherwise (within the jitter window or later) this IS the scheduled fire — **proceed**. This matters: CronCreate's own jitter routinely delivers the prompt 10–90 s before `cron_fires_at`; a naïve `NOW < FIRES_TS` check would misclassify every such on-time fire as "early" and silently break the chain. Verified live: a tick armed for `:39` fired at `:16` (23 s early) and must still chain.
 
 **Why not validate against ccusage?** This very turn is usually the first activity of the NEW 5-hour block, so a fresh fetch returns the new block's `endTime` — always in the future. Comparing against that would misclassify every legitimate fire as "early". ccusage is only used in Step 4 to aim the NEXT tick.
 
